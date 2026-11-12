@@ -1,0 +1,22 @@
+{
+  "name": "model-router",
+  "version": "0.1.0",
+  "description": "Picks the model and effort for each prompt, keeps each skill's own effort, and shows the model that really answered.",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Routing mode",
+      "description": "auto routes each prompt; observe only shows the model that answered.",
+      "options": ["auto", "observe"],
+      "default": "auto"
+    },
+    "topModel": {
+      "type": "string",
+      "title": "Model for hard prompts",
+      "description": "Alias or id used for design, architecture and long prompts.",
+      "default": "opus"
+    }
+  }
+}

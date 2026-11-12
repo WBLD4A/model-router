@@ -1,0 +1,11 @@
+{
+  "name": "model-router",
+  "owner": { "name": "WBLD4A" },
+  "plugins": [
+    {
+      "name": "model-router",
+      "source": "./",
+      "description": "Picks the model and effort for each prompt, keeps each skill's own effort, and shows the model that really answered."
+    }
+  ]
+}
