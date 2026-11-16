@@ -12,10 +12,15 @@ the effort each skill imposes, and shows the model that really answered.
 
 ## What it does
 
-- **Per prompt**: a short lookup goes to `haiku`/low, code changes to
-  `sonnet`/medium, design, architecture, security or long prompts to the
-  `topModel` option (default `opus`)/high. A one-word follow-up ("oui", "go")
-  keeps the previous turn's route. The choice holds for the whole turn.
+- **Per prompt**: any code modification, design, architecture, security or long
+  prompt goes to the `topModel` option (default `opus`)/high, except a very
+  small change (typo, rename, one line, label...) which goes to `sonnet`/low.
+  A short lookup goes to `haiku`/low, anything else to `sonnet`/medium. A
+  one-word follow-up ("oui", "go") keeps the previous turn's route.
+- **One model per conversation**: the first modification locks the model.
+  Later prompts keep it and only the effort follows the prompt. Lookups and
+  ambiguous prompts do not lock, so they cannot pin the session to a weak model
+  before real work starts.
 - **Skills**: once a skill loads, the `effort:` (and `model:`, if any) of its
   `SKILL.md` frontmatter wins for the rest of the turn.
 - **Subagents** keep the model their spawn asked for.
