@@ -22,7 +22,11 @@ the effort each skill imposes, and shows the model that really answered.
   ambiguous prompts do not lock, so they cannot pin the session to a weak model
   before real work starts.
 - **Skills**: once a skill loads, the `effort:` (and `model:`, if any) of its
-  `SKILL.md` frontmatter wins for the rest of the turn.
+  `SKILL.md` frontmatter wins for the rest of the turn. The router reads that
+  file itself when the Skill tool is called or a `/skill` command is typed,
+  from the project's `.claude/skills` then the user's: it does not rely on the
+  `skill.prompt` event, which a managed plugin may send past user mods. A skill
+  found only inside a plugin keeps the prompt's route.
 - **Subagents** keep the model their spawn asked for.
 - **Fable** is never chosen automatically, even as `topModel`; a session you put
   on Fable yourself is left alone.

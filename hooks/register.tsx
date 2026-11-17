@@ -1,8 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import type { Effort, Route } from '../types'
 import { asEffort, modelDot, prettyEffort, prettyModel, route, safeTop } from './rules.ts'
+import { frontmatterOf, skillFiles } from './skills.ts'
+
+type Skill = { name: string; effort?: Effort; model?: string }
 
 const last = atom({ plugin: 'model-router', key: 'last' } as const, null)
 // Model the conversation is locked to once a code modification started.
@@ -18,12 +21,19 @@ export const register: Register = (on, options) => {
 
   // The current turn's plan; reset by each prompt the person sends.
   let planned: Route | null = null
-  let skill: { name: string; effort?: Effort; model?: string } | null = null
+  let skill: Skill | null = null
 
   on('prompt.submit', async ($, e, next) => {
     if (e.isMeta) return next(e)
 
     skill = null
+    if (e.command) {
+      try {
+        skill = await skillOf($, e.command.name)
+      } catch {
+        // Not a skill, or unreadable: the prompt's route applies.
+      }
+    }
     if (mode !== 'auto') {
       planned = null
       return next(e)
@@ -47,11 +57,15 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => (next.called ? next(e) : ((planned = null), next(e))))
 
   // Each skill keeps the effort (and model) its SKILL.md frontmatter imposes.
-  on('skill.prompt', ($, e, next) => {
-    skill = {
-      name: e.skill,
-      effort: asEffort(e.frontmatter.effort),
-      model: typeof e.frontmatter.model === 'string' ? e.frontmatter.model : undefined,
+  // Read from the file on the Skill tool call, since a managed plugin may send
+  // `skill.prompt` past user mods.
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
+    if (e.agentId === undefined) {
+      try {
+        skill = (await skillOf($, e.skill)) ?? skill
+      } catch {
+        // Routing just keeps the prompt's plan.
+      }
     }
     return next(e)
   })
@@ -83,6 +97,19 @@ export const register: Register = (on, options) => {
     $.ui.status(line(await $.session.model(), '', undefined))
     return result
   })
+}
+
+/** The skill's own effort and model, from its SKILL.md; null without one. */
+const skillOf = async ($: EngineInterface, raw: string): Promise<Skill | null> => {
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
+  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? (home && `${home}/.claude`)
+  const files = skillFiles(raw, await $.session.cwd(), configDir)
+  for (const file of files) {
+    if (!(await $.fs.exists(file))) continue
+    const front = frontmatterOf(String(await $.fs.read(file)))
+    return { name: raw.replace(/^\//, ''), effort: asEffort(front.effort), model: front.model }
+  }
+  return null
 }
 
 /** The desktop footer draws only text, so the family is a colored dot. */
