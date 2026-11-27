@@ -30,10 +30,10 @@ export const frontmatterOf = (text: string): SkillFront => {
   const match = /^﻿?---\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(text)
   if (!match) return {}
   const front: SkillFront = {}
-  for (const line of match[1].split(/\r?\n/)) {
+  for (const line of (match[1] ?? '').split(/\r?\n/)) {
     const pair = /^(effort|model):[ \t]*(.*)$/.exec(line)
     if (!pair) continue
-    const value = unquote(pair[2].replace(/\s+#.*$/, ''))
+    const value = unquote((pair[2] ?? '').replace(/\s+#.*$/, ''))
     if (value !== '') front[pair[1] as keyof SkillFront] = value
   }
   return front

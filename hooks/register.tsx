@@ -8,8 +8,6 @@ import { frontmatterOf, skillFiles } from './skills.ts'
 type Skill = { name: string; effort?: Effort; model?: string }
 
 const last = atom({ plugin: 'model-router', key: 'last' } as const, null)
-// Model the conversation is locked to once a code modification started.
-const locked = atom({ plugin: 'model-router', key: 'locked' } as const, null)
 
 type Options = { mode?: string; topModel?: string }
 
@@ -41,17 +39,14 @@ export const register: Register = (on, options) => {
 
     const text = e.command ? e.command.args : e.text
     const previous = await read($, last)
-    const lockedModel = await read($, locked)
     const next_ = route({
       text,
       hasAttachments: (e.attachments?.length ?? 0) > 0,
       previous,
       topModel,
-      locked: lockedModel,
     })
     planned = next_
     await update($, last, () => next_)
-    if (next_.lock && !lockedModel) await update($, locked, () => next_.model)
 
     return next(e)
   }).catch(($, e, next) => (next.called ? next(e) : ((planned = null), next(e))))

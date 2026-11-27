@@ -21,6 +21,23 @@ const SMALL = words(
 
 const SMALL_MAX = 200
 
+/** Git, CI and PR housekeeping: Sonnet handles it, Opus is not worth it. */
+const OPS = words(
+  `merg${W}|fusionn${W}|conflit${W}|conflicts?|rebas${W}|ci|checks?|pipelines?|workflows?|rerun|relanc${W}|commit${W}|push${W}|pouss${W}|pr|prs|pull requests?|archiv${W}|labels?|[ée]tiquet${W}|tags?|releases?`,
+)
+
+/** Building something new: stays on the top model even next to an OPS word. */
+const BUILD = words(
+  `impl[ée]ment${W}|ajoute${W}|add|cr[ée]e[rz]?|create|[ée]cri[st]${W}|write|fonctionnalit[ée]s?|feature${W}|bugs?|bogues?|r[ée]gression${W}`,
+)
+
+const OPS_MAX = 300
+
+/** Text Claude Code writes itself when a conversation is compacted. */
+const SUMMARY = /^This session is being continued from a previous conversation/
+/** A brief another session hands to the one it starts. */
+const BRIEF = /^Background \(from the session that started this one\)/
+
 const LOOKUP = words(
   `o[uù]|liste|list|montre|show|affiche|quel(?:le)?s?|what|which|where|who|when|cherche|trouve|find|search|lis|read|r[ée]sume|summari[sz]e|traduis|translate|explique|explain|combien|how many|est-ce que|is|are|does|do`,
   true,
@@ -28,7 +45,7 @@ const LOOKUP = words(
 
 /** A reply that only answers the previous turn: keep its route. */
 const FOLLOW_UP =
-  /^(?:oui|non|ok|okay|yes|no|go|vas-?y|continue|d'accord|parfait|merci|thanks?|fais[- ]le|do it|proceed|[1-9]|[a-c])[\s.!]*$/iu
+  /^(?:oui|non|ok|okay|yes|no|go|vas-?y|continue|d'accord|parfait|merci|thanks?|fais[- ]le|do it|proceed|[1-9]|[a-c])(?:[\s,]+[\p{L}'-]+){0,3}[\s.!]*$/iu
 
 /** Fable drains usage: never chosen automatically, even as `topModel`. */
 export const safeTop = (model: string): string => (/fable/i.test(model) ? 'opus' : model)
@@ -54,55 +71,55 @@ export type Inputs = {
   hasAttachments: boolean
   previous: Route | null
   topModel: string
-  /** Model the conversation is already locked to, if any. */
-  locked?: string | null
 }
 
 /**
- * Picks a model and effort for a prompt from its wording and length alone.
+ * Picks a model and effort for each prompt from its wording and length alone.
  *
- * Any code modification starts on `topModel` (Opus) unless it is a very small
- * change. The first such prompt locks the model for the whole conversation
- * (`lock: true`): later prompts keep it and only the effort follows the prompt.
- * Lookups and ambiguous prompts never lock, so they cannot pin the session to a
- * weak model before any real work starts.
+ * Code modifications and design go to `topModel` (Opus); Git, CI and PR
+ * housekeeping and very small changes go to Sonnet. Every prompt is routed on
+ * its own: a conversation is never pinned to Opus by its first prompt. A
+ * compaction summary keeps the previous route, and a session brief is not
+ * hard just because it is long.
  */
-export const route = ({
-  text,
-  hasAttachments,
-  previous,
-  topModel,
-  locked = null,
-}: Inputs): Route => {
+export const route = ({ text, hasAttachments, previous, topModel }: Inputs): Route => {
   const t = text.trim()
-  const model = (wanted: string): string => locked ?? wanted
 
   if (previous && t.length <= 40 && FOLLOW_UP.test(t)) {
-    return { ...previous, model: model(previous.model), reason: 'suite du tour précédent' }
+    return { ...previous, reason: 'suite du tour précédent' }
   }
 
-  if (t.length > 1500 || HARD.test(t)) {
-    const reason = t.length > 1500 ? 'prompt long' : 'conception / analyse'
-    return pick(model(topModel), 'high', reason, true)
+  if (SUMMARY.test(t)) {
+    return previous
+      ? { ...previous, reason: 'reprise après compaction' }
+      : pick('sonnet', 'medium', 'reprise après compaction')
+  }
+
+  if ((t.length > 1500 && !BRIEF.test(t)) || HARD.test(t)) {
+    const reason = t.length > 1500 && !BRIEF.test(t) ? 'prompt long' : 'conception / analyse'
+    return pick(topModel, 'high', reason)
+  }
+
+  if (!hasAttachments && t.length <= OPS_MAX && OPS.test(t) && !BUILD.test(t)) {
+    return pick('sonnet', 'medium', 'git / CI / PR')
   }
 
   if (EDIT.test(t) || hasAttachments) {
     if (!hasAttachments && t.length <= SMALL_MAX && SMALL.test(t)) {
-      return pick(model('sonnet'), 'low', 'très petite modification', true)
+      return pick('sonnet', 'low', 'très petite modification')
     }
     const reason = hasAttachments ? 'pièce jointe' : 'modification de code'
-    return pick(model(topModel), 'high', reason, true)
+    return pick(topModel, 'high', reason)
   }
 
   if (t.length <= 160 && LOOKUP.test(t)) {
-    return pick(model('haiku'), 'low', 'question courte / recherche')
+    return pick('haiku', 'low', 'question courte / recherche')
   }
 
-  return pick(model('sonnet'), 'medium', 'par défaut')
+  return pick('sonnet', 'medium', 'par défaut')
 }
 
-const pick = (model: string, effort: Effort, reason: string, lock = false): Route =>
-  lock ? { model, effort, reason, lock } : { model, effort, reason }
+const pick = (model: string, effort: Effort, reason: string): Route => ({ model, effort, reason })
 
 const EFFORTS: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
